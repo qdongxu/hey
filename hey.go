@@ -243,6 +243,7 @@ func main() {
 		DisableRedirects:   *disableRedirects,
 		H2:                 *h2,
 		ProxyAddr:          proxyURL,
+		DoLog:              *doLog,
 		Output:             *output,
 	}
 	w.Init()

@@ -18,8 +18,9 @@ package requester
 import (
 	"bytes"
 	"crypto/tls"
+	"github.com/tidwall/gjson"
+	"go.uber.org/ratelimit"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -72,6 +73,8 @@ type Work struct {
 	// Qps is the rate limit in queries per second.
 	QPS float64
 
+	rateLimiter ratelimit.Limiter
+
 	// DisableCompression is an option to disable compression in response
 	DisableCompression bool
 
@@ -88,6 +91,8 @@ type Work struct {
 	// ProxyAddr is the address of HTTP proxy server in the format on "host:port".
 	// Optional.
 	ProxyAddr *url.URL
+
+	DoLog bool
 
 	// Writer is where results will be written. If nil, results are written to stdout.
 	Writer io.Writer
@@ -112,6 +117,7 @@ func (b *Work) Init() {
 	b.initOnce.Do(func() {
 		b.results = make(chan *result, min(b.C*1000, maxResult))
 		b.stopCh = make(chan struct{}, b.C)
+		b.rateLimiter = ratelimit.New(int(b.QPS))
 	})
 }
 
@@ -183,16 +189,26 @@ func (b *Work) makeRequest(c *http.Client) {
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	resp, err := c.Do(req)
+
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-	doLog := false
+	succeed := false
 	if err == nil {
-		doLog = true
+		succeed = true
 		size = resp.ContentLength
 		code = resp.StatusCode
-		io.Copy(buf, resp.Body)
+		if b.DoLog {
+			io.Copy(buf, resp.Body)
+		} else {
+			io.Copy(io.Discard, resp.Body)
+		}
 		resp.Body.Close()
 	} else {
 		Logger().Error().Time("time", time.Now()).Err(err).Msg("")
+	}
+
+	value := gjson.Get(buf.String(), "code")
+	if value.Exists() {
+		code = int(value.Int())
 	}
 
 	t := now()
@@ -211,31 +227,26 @@ func (b *Work) makeRequest(c *http.Client) {
 		delayDuration: delayDuration,
 	}
 
-	if doLog {
+	if succeed {
 		Logger().Info().Time("time", time.Now()).Int("status", code).Dur("duration", finish).Bytes("body", buf.Bytes()).Msg("")
 	}
 }
 
 func (b *Work) runWorker(client *http.Client, n int) {
-	var throttle <-chan time.Time
-	if b.QPS > 0 {
-		throttle = time.Tick(time.Duration(1e6/(b.QPS)) * time.Microsecond)
-	}
 
 	if b.DisableRedirects {
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		}
 	}
+
 	for i := 0; i < n; i++ {
 		// Check if application is stopped. Do not send into a closed channel.
 		select {
 		case <-b.stopCh:
 			return
 		default:
-			if b.QPS > 0 {
-				<-throttle
-			}
+			b.rateLimiter.Take()
 			b.makeRequest(client)
 		}
 	}
@@ -284,7 +295,7 @@ func cloneRequest(r *http.Request, body []byte) *http.Request {
 		r2.Header[k] = append([]string(nil), s...)
 	}
 	if len(body) > 0 {
-		r2.Body = ioutil.NopCloser(bytes.NewReader(body))
+		r2.Body = io.NopCloser(bytes.NewReader(body))
 	}
 	return r2
 }
