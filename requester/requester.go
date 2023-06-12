@@ -107,7 +107,7 @@ func (b *Work) writer() io.Writer {
 	return b.Writer
 }
 
-// Init initializes internal data-structures
+// InitLogger initializes internal data-structures
 func (b *Work) Init() {
 	b.initOnce.Do(func() {
 		b.results = make(chan *result, min(b.C*1000, maxResult))
@@ -183,12 +183,18 @@ func (b *Work) makeRequest(c *http.Client) {
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	resp, err := c.Do(req)
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
+	doLog := false
 	if err == nil {
+		doLog = true
 		size = resp.ContentLength
 		code = resp.StatusCode
-		io.Copy(ioutil.Discard, resp.Body)
+		io.Copy(buf, resp.Body)
 		resp.Body.Close()
+	} else {
+		Logger().Error().Time("time", time.Now()).Err(err).Msg("")
 	}
+
 	t := now()
 	resDuration = t - resStart
 	finish := t - s
@@ -203,6 +209,10 @@ func (b *Work) makeRequest(c *http.Client) {
 		reqDuration:   reqDuration,
 		resDuration:   resDuration,
 		delayDuration: delayDuration,
+	}
+
+	if doLog {
+		Logger().Info().Time("time", time.Now()).Int("status", code).Dur("duration", finish).Bytes("body", buf.Bytes()).Msg("")
 	}
 }
 

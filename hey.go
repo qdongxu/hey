@@ -18,7 +18,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/http"
 	gourl "net/url"
@@ -48,6 +47,8 @@ var (
 	authHeader  = flag.String("a", "", "")
 	hostHeader  = flag.String("host", "", "")
 	userAgent   = flag.String("U", "", "")
+	doLog       = flag.Bool("l", false, "")
+	logFile     = flag.String("log-file", fmt.Sprintf("/var/tmp/hey_testcase_%s.log", time.Now().Format(time.RFC3339)), "")
 
 	output = flag.String("o", "", "")
 
@@ -81,6 +82,8 @@ Options:
       metrics in comma-separated values format.
 
   -m  HTTP method, one of GET, POST, PUT, DELETE, HEAD, OPTIONS.
+  -l  Open the test response log or not, Default: false.
+  -log-file The test response log file path, Default: /var/tmp/hey_testcase_<time>.log.
   -H  Custom HTTP header. You can specify as many as needed by repeating the flag.
       For example, -H "Accept: text/html" -H "Content-Type: application/xml" .
   -t  Timeout for each request in seconds. Default is 20, use 0 for infinite.
@@ -115,6 +118,13 @@ func main() {
 	if flag.NArg() < 1 {
 		usageAndExit("")
 	}
+
+	logFileOpened := requester.InitLogger(*doLog, *logFile)
+	defer func() {
+		if logFileOpened != nil {
+			logFileOpened.Close()
+		}
+	}()
 
 	runtime.GOMAXPROCS(*cpus)
 	num := *n
@@ -175,7 +185,7 @@ func main() {
 		bodyAll = []byte(*body)
 	}
 	if *bodyFile != "" {
-		slurp, err := ioutil.ReadFile(*bodyFile)
+		slurp, err := os.ReadFile(*bodyFile)
 		if err != nil {
 			errAndExit(err.Error())
 		}
