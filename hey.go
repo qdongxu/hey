@@ -16,6 +16,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"math"
@@ -49,6 +50,7 @@ var (
 	userAgent   = flag.String("U", "", "")
 	doLog       = flag.Bool("l", false, "")
 	logFile     = flag.String("log-file", fmt.Sprintf("/var/tmp/hey_testcase_%s.log", time.Now().Format(time.RFC3339)), "")
+	version     = flag.Bool("version", false, "")
 
 	output = flag.String("o", "", "")
 
@@ -73,7 +75,7 @@ Options:
   -n  Number of requests to run. Default is 200.
   -c  Number of workers to run concurrently. Total number of requests cannot
       be smaller than the concurrency level. Default is 50.
-  -q  Rate limit, in queries per second (QPS) Default is no rate limit.
+  -q  Rate limit, in queries per second (QPS)  Default is no rate limit.
   -z  Duration of application to send requests. When duration is reached,
       application stops and exits. If duration is specified, n is ignored.
       Examples: -z 10s -z 3m.
@@ -104,7 +106,16 @@ Options:
   -disable-redirects    Disable following of HTTP redirects
   -cpus                 Number of used cpu cores.
                         (default for current machine is %d cores)
+  -version              Show version
 `
+
+//go:generate sh -c "printf %s $(git rev-parse HEAD) > COMMIT.txt"
+//go:embed COMMIT.txt
+var Commit string
+
+//go:generate sh -c "printf %s $(git tag --sort=version:refname | tail -1) > VERSION.txt"
+//go:embed VERSION.txt
+var Version string
 
 func main() {
 	flag.Usage = func() {
@@ -115,6 +126,11 @@ func main() {
 	flag.Var(&hs, "H", "")
 
 	flag.Parse()
+	if *version {
+		fmt.Printf("hey %s (git commit: %s)\n", Version, Commit)
+		os.Exit(0)
+	}
+
 	if flag.NArg() < 1 {
 		usageAndExit("")
 	}
