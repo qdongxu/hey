@@ -269,6 +269,7 @@ func main() {
 	go func() {
 		<-c
 		w.Stop()
+		w.Cancel()
 	}()
 	if dur > 0 {
 		go func() {

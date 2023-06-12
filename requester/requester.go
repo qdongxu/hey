@@ -17,6 +17,7 @@ package requester
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"github.com/tidwall/gjson"
 	"go.uber.org/ratelimit"
@@ -103,6 +104,9 @@ type Work struct {
 	start    time.Duration
 
 	report *report
+
+	ctx    context.Context
+	Cancel context.CancelFunc
 }
 
 func (b *Work) writer() io.Writer {
@@ -123,6 +127,8 @@ func (b *Work) Init() {
 		} else {
 			b.rateLimiter = ratelimit.NewUnlimited()
 		}
+
+		b.ctx, b.Cancel = context.WithCancel(context.Background())
 	})
 }
 
@@ -192,7 +198,8 @@ func (b *Work) makeRequest(c *http.Client) {
 			resStart = now()
 		},
 	}
-	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+	req = req.WithContext(httptrace.WithClientTrace(b.ctx, trace))
 	resp, err := c.Do(req)
 
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
