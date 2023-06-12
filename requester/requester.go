@@ -117,7 +117,12 @@ func (b *Work) Init() {
 	b.initOnce.Do(func() {
 		b.results = make(chan *result, min(b.C*1000, maxResult))
 		b.stopCh = make(chan struct{}, b.C)
-		b.rateLimiter = ratelimit.New(int(b.QPS))
+		qpsInt := int(b.QPS)
+		if qpsInt > 0 {
+			b.rateLimiter = ratelimit.New(qpsInt)
+		} else {
+			b.rateLimiter = ratelimit.NewUnlimited()
+		}
 	})
 }
 
