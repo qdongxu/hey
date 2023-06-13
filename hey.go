@@ -51,6 +51,8 @@ var (
 	doLog       = flag.Bool("l", false, "")
 	logFile     = flag.String("log-file", fmt.Sprintf("/var/tmp/hey_testcase_%s.log", time.Now().Format(time.RFC3339)), "")
 	version     = flag.Bool("version", false, "")
+	bc          = flag.Bool("bc", false, "")
+	bodyCode    = flag.String("body-code", "code", "")
 
 	output = flag.String("o", "", "")
 
@@ -97,6 +99,7 @@ Options:
   -a  Basic authentication, username:password.
   -x  HTTP Proxy address as host:port.
   -h2 Enable HTTP/2.
+  -bc Should check error code in the JSON http body or not, Default: false.
 
   -host	HTTP Host header.
 
@@ -107,6 +110,9 @@ Options:
   -cpus                 Number of used cpu cores.
                         (default for current machine is %d cores)
   -version              Show version
+  -body-code 		    A filed in the json body indicating the error code. 
+                        Some application does not follow RESTFul API style, encoding
+                        the response code in the body, and returns 200 as http status code always.
 `
 
 //go:generate sh -c "printf %s $(git rev-parse HEAD) > COMMIT.txt"
@@ -260,6 +266,8 @@ func main() {
 		H2:                 *h2,
 		ProxyAddr:          proxyURL,
 		DoLog:              *doLog,
+		BC:                 *bc,
+		BodyCode:           *bodyCode,
 		Output:             *output,
 	}
 	w.Init()

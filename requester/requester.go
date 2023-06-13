@@ -96,6 +96,12 @@ type Work struct {
 
 	DoLog bool
 
+	//Should check error code in the JSON body
+	BC bool
+
+	// field name in the JSON body
+	BodyCode string
+
 	// Writer is where results will be written. If nil, results are written to stdout.
 	Writer io.Writer
 
@@ -203,13 +209,14 @@ func (b *Work) makeRequest(c *http.Client) {
 	req = req.WithContext(httptrace.WithClientTrace(b.ctx, trace))
 	resp, err := c.Do(req)
 
-	buf := bytes.NewBuffer(make([]byte, 0, 1024))
+	var buf *bytes.Buffer
 	succeed := false
 	if err == nil {
 		succeed = true
 		size = resp.ContentLength
 		code = resp.StatusCode
-		if b.DoLog {
+		if b.DoLog || b.BC {
+			buf = bytes.NewBuffer(make([]byte, 0, 1024))
 			io.Copy(buf, resp.Body)
 		} else {
 			io.Copy(io.Discard, resp.Body)
@@ -224,9 +231,11 @@ func (b *Work) makeRequest(c *http.Client) {
 		}
 	}
 
-	value := gjson.Get(buf.String(), "code")
-	if value.Exists() {
-		code = int(value.Int())
+	if b.BC {
+		value := gjson.Get(buf.String(), b.BodyCode)
+		if value.Exists() {
+			code = int(value.Int())
+		}
 	}
 
 	t := now()
