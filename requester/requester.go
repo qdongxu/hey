@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"github.com/tidwall/gjson"
 	"go.uber.org/ratelimit"
 	"io"
@@ -116,7 +117,7 @@ func (b *Work) writer() io.Writer {
 	return b.Writer
 }
 
-// InitLogger initializes internal data-structures
+// Init initializes internal data-structures
 func (b *Work) Init() {
 	b.initOnce.Do(func() {
 		b.results = make(chan *result, min(b.C*1000, maxResult))
@@ -216,6 +217,11 @@ func (b *Work) makeRequest(c *http.Client) {
 		resp.Body.Close()
 	} else {
 		Logger().Error().Time("time", time.Now()).Err(err).Msg("")
+
+		if errors.Is(err, context.Canceled) {
+			// Do not statistic after canceled by ctr-c
+			return
+		}
 	}
 
 	value := gjson.Get(buf.String(), "code")
