@@ -23,6 +23,7 @@ import (
 	"github.com/tidwall/gjson"
 	"go.uber.org/ratelimit"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -260,7 +261,8 @@ func (b *Work) makeRequest(c *http.Client) {
 	}
 
 	if succeed {
-		Logger().Info().Time("time", time.Now()).Int("status", code).Dur("duration", finish).Bytes("body", buf.Bytes()).Msg("")
+		Logger().Info().Time("time", time.Now()).Int("status", code).Dur("duration", finish).Bytes(
+			"body", buf.Bytes()).Msg("")
 	}
 }
 
@@ -288,10 +290,15 @@ func (b *Work) runWorkers() {
 	var wg sync.WaitGroup
 	wg.Add(b.C)
 
+	hostName, _, err := net.SplitHostPort(b.Request.Host)
+	if err != nil {
+		hostName = b.Request.Host
+	}
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         b.Request.Host,
+			ServerName:         hostName,
 		},
 		MaxIdleConnsPerHost: min(b.C, maxIdleConn),
 		DisableCompression:  b.DisableCompression,
