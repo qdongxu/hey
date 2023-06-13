@@ -110,7 +110,7 @@ Options:
   -cpus                 Number of used cpu cores.
                         (default for current machine is %d cores)
   -version              Show version
-  -body-code 		    A filed in the json body indicating the error code. 
+  -body-code            A filed in the json body indicating the error code. 
                         Some application does not follow RESTFul API style, encoding
                         the response code in the body, and returns 200 as http status code always.
 `
@@ -276,6 +276,7 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		<-c
+		fmt.Println("\nInterrupted")
 		w.Stop()
 		w.Cancel()
 	}()
