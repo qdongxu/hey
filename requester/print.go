@@ -76,6 +76,7 @@ func histogram(buckets []Bucket) string {
 var (
 	defaultTmpl = `
 Summary:
+  Real:		{{ formatNumber .Real.Seconds }} secs
   Total:	{{ formatNumber .Total.Seconds }} secs
   Slowest:	{{ formatNumber .Slowest }} secs
   Fastest:	{{ formatNumber .Fastest }} secs

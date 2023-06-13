@@ -28,6 +28,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -114,6 +115,8 @@ type Work struct {
 
 	ctx    context.Context
 	Cancel context.CancelFunc
+
+	StopTimestamp int64
 }
 
 func (b *Work) writer() io.Writer {
@@ -155,6 +158,7 @@ func (b *Work) Run() {
 
 func (b *Work) Stop() {
 	// Send stop signal so that workers can stop gracefully.
+	atomic.StoreInt64(&b.StopTimestamp, int64(now()-b.start))
 	for i := 0; i < b.C; i++ {
 		b.stopCh <- struct{}{}
 	}
@@ -162,10 +166,11 @@ func (b *Work) Stop() {
 
 func (b *Work) Finish() {
 	close(b.results)
-	total := now() - b.start
+	total := time.Duration(atomic.LoadInt64(&b.StopTimestamp)) - b.start
+	real := now() - b.start
 	// Wait until the reporter is done.
 	<-b.report.done
-	b.report.finalize(total)
+	b.report.finalize(total, real)
 }
 
 func (b *Work) makeRequest(c *http.Client) {

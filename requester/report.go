@@ -53,6 +53,7 @@ type report struct {
 	results chan *result
 	done    chan bool
 	total   time.Duration
+	real    time.Duration
 
 	errorDist map[string]int
 	lats      []float64
@@ -113,8 +114,9 @@ func runReporter(r *report) {
 	r.done <- true
 }
 
-func (r *report) finalize(total time.Duration) {
+func (r *report) finalize(total time.Duration, real time.Duration) {
 	r.total = total
+	r.real = real
 	r.rps = float64(r.numRes) / r.total.Seconds()
 	r.average = r.avgTotal / float64(len(r.lats))
 	r.avgConn = r.avgConn / float64(len(r.lats))
@@ -152,6 +154,7 @@ func (r *report) snapshot() Report {
 		AvgRes:      r.avgRes,
 		AvgDelay:    r.avgDelay,
 		Total:       r.total,
+		Real:        r.real,
 		ErrorDist:   r.errorDist,
 		NumRes:      r.numRes,
 		Lats:        make([]float64, len(r.lats)),
@@ -300,6 +303,7 @@ type Report struct {
 	StatusCodes []int
 
 	Total time.Duration
+	Real  time.Duration
 
 	ErrorDist      map[string]int
 	StatusCodeDist map[int]int
