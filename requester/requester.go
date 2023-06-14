@@ -29,7 +29,6 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -117,7 +116,7 @@ type Work struct {
 	ctx    context.Context
 	Cancel context.CancelFunc
 
-	StopTimestamp int64
+	totalTimeChan chan time.Duration
 }
 
 func (b *Work) writer() io.Writer {
@@ -140,6 +139,7 @@ func (b *Work) Init() {
 		}
 
 		b.ctx, b.Cancel = context.WithCancel(context.Background())
+		b.totalTimeChan = make(chan time.Duration, b.C)
 	})
 }
 
@@ -153,13 +153,13 @@ func (b *Work) Run() {
 	go func() {
 		runReporter(b.report)
 	}()
+	go b.tickTotalTime()
 	b.runWorkers()
 	b.Finish()
 }
 
 func (b *Work) Stop() {
 	// Send stop signal so that workers can stop gracefully.
-	atomic.StoreInt64(&b.StopTimestamp, int64(now()-b.start))
 	for i := 0; i < b.C; i++ {
 		b.stopCh <- struct{}{}
 	}
@@ -167,7 +167,7 @@ func (b *Work) Stop() {
 
 func (b *Work) Finish() {
 	close(b.results)
-	total := time.Duration(atomic.LoadInt64(&b.StopTimestamp)) - b.start
+	total := <-b.totalTimeChan - b.start
 	real := now() - b.start
 	// Wait until the reporter is done.
 	<-b.report.done
@@ -260,13 +260,16 @@ func (b *Work) makeRequest(c *http.Client) {
 		delayDuration: delayDuration,
 	}
 
-	if succeed {
+	if b.DoLog && succeed {
 		Logger().Info().Time("time", time.Now()).Int("status", code).Dur("duration", finish).Bytes(
 			"body", buf.Bytes()).Msg("")
 	}
 }
 
 func (b *Work) runWorker(client *http.Client, n int) {
+	defer func() {
+		b.totalTimeChan <- now()
+	}()
 
 	if b.DisableRedirects {
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -344,4 +347,11 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// tickTotalTime discards the first half of  total time
+func (b *Work) tickTotalTime() {
+	for i := 0; i < (b.C)/2; i++ {
+		<-b.totalTimeChan
+	}
 }
