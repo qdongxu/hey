@@ -39,6 +39,8 @@ import (
 const maxResult = 1000000
 const maxIdleConn = 500
 
+var totalTimeOnce sync.Once
+
 type result struct {
 	err           error
 	statusCode    int
@@ -159,7 +161,6 @@ func (b *Work) Run() {
 
 func (b *Work) Stop() {
 	// Send stop signal so that workers can stop gracefully.
-	atomic.StoreInt64(&b.StopTimestamp, int64(now()-b.start))
 	for i := 0; i < b.C; i++ {
 		b.stopCh <- struct{}{}
 	}
@@ -267,6 +268,9 @@ func (b *Work) makeRequest(c *http.Client) {
 }
 
 func (b *Work) runWorker(client *http.Client, n int) {
+	defer totalTimeOnce.Do(func() {
+		atomic.StoreInt64(&b.StopTimestamp, int64(now()))
+	})
 
 	if b.DisableRedirects {
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
